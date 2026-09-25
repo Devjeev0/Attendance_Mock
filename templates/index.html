@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="GPS-based Attendance Validation System — Mark attendance using your live location.">
+    <title>AttendTrack — GPS Attendance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ─────────────────────────── CSS RESET & TOKENS ─────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary:    #0a0e1a;
+            --bg-secondary:  #111827;
+            --bg-card:       rgba(17, 24, 39, 0.65);
+            --bg-card-hover: rgba(30, 41, 59, 0.7);
+            --border:        rgba(99, 102, 241, 0.15);
+            --border-glow:   rgba(99, 102, 241, 0.35);
+            --text-primary:  #f1f5f9;
+            --text-secondary:#94a3b8;
+            --text-muted:    #64748b;
+            --accent:        #818cf8;
+            --accent-light:  #a5b4fc;
+            --accent-dark:   #6366f1;
+            --success:       #34d399;
+            --success-bg:    rgba(52, 211, 153, 0.12);
+            --danger:        #f87171;
+            --danger-bg:     rgba(248, 113, 113, 0.12);
+            --warning:       #fbbf24;
+            --warning-bg:    rgba(251, 191, 36, 0.10);
+            --gradient-hero:  linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
+            --gradient-card:  linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.04) 100%);
+            --radius:        16px;
+            --radius-sm:     10px;
+            --radius-xs:     6px;
+            --shadow:        0 8px 32px rgba(0,0,0,0.4);
+            --shadow-glow:   0 0 40px rgba(99,102,241,0.15);
+            --transition:    all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --font:          'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ────────────────────────── BACKGROUND EFFECTS ─────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background:
+                radial-gradient(ellipse 600px 600px at 20% 30%, rgba(99,102,241,0.07), transparent),
+                radial-gradient(ellipse 400px 400px at 80% 70%, rgba(139,92,246,0.05), transparent),
+                radial-gradient(ellipse 300px 300px at 50% 10%, rgba(59,130,246,0.04), transparent);
+            pointer-events: none;
+            z-index: 0;
+            animation: bgShift 20s ease-in-out infinite alternate;
+        }
+        @keyframes bgShift {
+            0%   { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(-30px, 20px) rotate(2deg); }
+        }
+
+        /* ─────────────────────────── UTILITY CLASSES ────────────────────────────── */
+        .hidden   { display: none !important; }
+        .sr-only  { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+        /* ───────────────────────────── NAVBAR ───────────────────────────────────── */
+        .navbar {
+            position: sticky; top: 0; z-index: 100;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 32px;
+            background: rgba(10, 14, 26, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+        .navbar-brand {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 1.25rem; font-weight: 700;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .navbar-brand svg { flex-shrink: 0; }
+        .navbar-user {
+            display: flex; align-items: center; gap: 12px;
+            color: var(--text-secondary); font-size: 0.9rem;
+        }
+        .navbar-user .avatar {
+            width: 34px; height: 34px; border-radius: 50%;
+            background: var(--gradient-hero);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.85rem; color: white;
+        }
+        .btn-logout {
+            background: transparent; border: 1px solid rgba(248,113,113,0.3);
+            color: var(--danger); padding: 6px 14px; border-radius: var(--radius-xs);
+            cursor: pointer; font-size: 0.8rem; font-weight: 500;
+            transition: var(--transition);
+        }
+        .btn-logout:hover { background: var(--danger-bg); border-color: var(--danger); }
+
+        /* ──────────────────────────── LAYOUT ────────────────────────────────────── */
+        .container {
+            max-width: 1200px; margin: 0 auto; padding: 32px 24px;
+            position: relative; z-index: 1;
+        }
+
+        /* ──────────────────────── LOGIN SCREEN ─────────────────────────────────── */
+        .login-wrapper {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 24px;
+        }
+        .login-card {
+            width: 100%; max-width: 420px;
+            background: var(--bg-card);
+            backdrop-filter: blur(24px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 48px 36px;
+            box-shadow: var(--shadow), var(--shadow-glow);
+            animation: fadeUp 0.6s ease-out;
+        }
+        .login-card h1 {
+            text-align: center; font-size: 1.75rem; font-weight: 800;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 6px;
+        }
+        .login-card .subtitle {
+            text-align: center; color: var(--text-muted); font-size: 0.9rem; margin-bottom: 32px;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block; font-size: 0.8rem; font-weight: 600;
+            color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .form-input {
+            width: 100%; padding: 12px 16px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary); font-size: 0.95rem; font-family: var(--font);
+            transition: var(--transition); outline: none;
+        }
+        .form-input:focus {
+            border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .form-input::placeholder { color: var(--text-muted); }
+
+        .btn-primary {
+            width: 100%; padding: 13px 24px;
+            background: var(--gradient-hero);
+            border: none; border-radius: var(--radius-sm);
+            color: white; font-size: 1rem; font-weight: 600; font-family: var(--font);
+            cursor: pointer; transition: var(--transition);
+            position: relative; overflow: hidden;
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(99,102,241,0.35); }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .login-error {
+            background: var(--danger-bg); border: 1px solid rgba(248,113,113,0.25);
+            color: var(--danger); padding: 10px 14px; border-radius: var(--radius-xs);
+            font-size: 0.85rem; margin-bottom: 16px; text-align: center;
+        }
+
+        /* ──────────────────────── DASHBOARD ────────────────────────────────────── */
+        .dashboard-header {
+            margin-bottom: 32px;
+        }
+        .dashboard-header h1 {
+            font-size: 1.75rem; font-weight: 800;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; margin-bottom: 4px;
+        }
+        .dashboard-header p { color: var(--text-muted); font-size: 0.95rem; }
+
+        .grid {
+            display: grid; gap: 24px;
+            grid-template-columns: 1fr 1fr;
+        }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+        /* ─────────────────────────── CARD ───────────────────────────────────────── */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            animation: fadeUp 0.5s ease-out both;
+        }
+        .card:hover { border-color: var(--border-glow); box-shadow: var(--shadow), var(--shadow-glow); }
+        .card-title {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 1.05rem; font-weight: 700; margin-bottom: 20px; color: var(--text-primary);
+        }
+        .card-title .icon {
+            width: 36px; height: 36px; border-radius: var(--radius-xs);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .card-title .icon.purple  { background: rgba(139,92,246,0.15); color: #a78bfa; }
+        .card-title .icon.blue    { background: rgba(59,130,246,0.15); color: #60a5fa; }
+        .card-title .icon.green   { background: rgba(52,211,153,0.15); color: #34d399; }
+        .card-title .icon.amber   { background: rgba(251,191,36,0.15); color: #fbbf24; }
+
+        .card.full-width { grid-column: 1 / -1; }
+
+        /* ───────────────────── GPS LOCATION SECTION ─────────────────────────────── */
+        .gps-status {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 18px; border-radius: var(--radius-sm);
+            background: rgba(30,41,59,0.5); border: 1px solid var(--border);
+            margin-bottom: 18px; font-size: 0.9rem;
+        }
+        .gps-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+            background: var(--text-muted);
+            transition: var(--transition);
+        }
+        .gps-dot.active { background: var(--success); box-shadow: 0 0 8px rgba(52,211,153,0.5); }
+        .gps-dot.loading { background: var(--warning); animation: pulse 1.2s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+        .coord-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;
+        }
+        .coord-box {
+            background: rgba(30,41,59,0.5); border: 1px solid var(--border);
+            border-radius: var(--radius-xs); padding: 12px 14px;
+        }
+        .coord-box .label { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+        .coord-box .value { font-size: 1.1rem; font-weight: 700; color: var(--accent-light); font-variant-numeric: tabular-nums; }
+
+        /* ────────────────────── OFFICE SELECT ──────────────────────────────────── */
+        .select-wrapper { position: relative; margin-bottom: 18px; }
+        .form-select {
+            width: 100%; padding: 12px 16px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary); font-size: 0.95rem; font-family: var(--font);
+            appearance: none; cursor: pointer; transition: var(--transition); outline: none;
+        }
+        .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+        .select-wrapper::after {
+            content: '▾'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+            color: var(--text-muted); pointer-events: none; font-size: 0.85rem;
+        }
+        .form-select option { background: var(--bg-secondary); color: var(--text-primary); }
+
+        .office-info {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; border-radius: var(--radius-xs);
+            background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.1);
+            font-size: 0.83rem; color: var(--text-secondary); margin-bottom: 18px;
+        }
+
+        .btn-mark {
+            width: 100%; padding: 14px 24px;
+            background: var(--gradient-hero);
+            border: none; border-radius: var(--radius-sm);
+            color: white; font-size: 1rem; font-weight: 700; font-family: var(--font);
+            cursor: pointer; transition: var(--transition);
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-mark:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(99,102,241,0.4); }
+        .btn-mark:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* ───────────────────── RESULT TOAST ─────────────────────────────────────── */
+        .result-toast {
+            margin-top: 18px; padding: 16px 20px; border-radius: var(--radius-sm);
+            animation: fadeUp 0.4s ease-out;
+        }
+        .result-toast.success {
+            background: var(--success-bg); border: 1px solid rgba(52,211,153,0.25);
+        }
+        .result-toast.error {
+            background: var(--danger-bg); border: 1px solid rgba(248,113,113,0.25);
+        }
+        .result-toast .toast-title {
+            font-weight: 700; font-size: 0.95rem; margin-bottom: 4px;
+        }
+        .result-toast.success .toast-title { color: var(--success); }
+        .result-toast.error .toast-title   { color: var(--danger); }
+        .result-toast .toast-body { font-size: 0.85rem; color: var(--text-secondary); }
+        .result-toast .distance-highlight {
+            font-size: 1.3rem; font-weight: 800; margin-top: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+        .result-toast.success .distance-highlight { color: var(--success); }
+        .result-toast.error .distance-highlight   { color: var(--danger); }
+
+        /* ───────────────────── DISTANCE GAUGE ──────────────────────────────────── */
+        .gauge-container {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 20px 0;
+        }
+        .gauge-ring {
+            width: 180px; height: 180px; position: relative;
+        }
+        .gauge-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .gauge-track { fill: none; stroke: rgba(99,102,241,0.1); stroke-width: 10; }
+        .gauge-fill {
+            fill: none; stroke: url(#gaugeGrad); stroke-width: 10;
+            stroke-linecap: round;
+            stroke-dasharray: 502; stroke-dashoffset: 502;
+            transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1);
+        }
+        .gauge-center {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            text-align: center;
+        }
+        .gauge-value { font-size: 2rem; font-weight: 800; color: var(--accent-light); font-variant-numeric: tabular-nums; }
+        .gauge-unit  { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+        .gauge-label { margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary); text-align: center; }
+
+        /* ───────────────────── HISTORY TABLE ────────────────────────────────────── */
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        thead th {
+            text-align: left; padding: 10px 14px;
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); border-bottom: 1px solid var(--border);
+        }
+        tbody td {
+            padding: 12px 14px; font-size: 0.88rem; color: var(--text-secondary);
+            border-bottom: 1px solid rgba(99,102,241,0.06);
+            font-variant-numeric: tabular-nums;
+        }
+        tbody tr { transition: var(--transition); }
+        tbody tr:hover { background: rgba(99,102,241,0.04); }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+        }
+        .badge.present { background: var(--success-bg); color: var(--success); }
+        .badge.rejected { background: var(--danger-bg); color: var(--danger); }
+        .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .badge.present .badge-dot { background: var(--success); }
+        .badge.rejected .badge-dot { background: var(--danger); }
+
+        .empty-state {
+            text-align: center; padding: 40px 20px; color: var(--text-muted);
+        }
+        .empty-state svg { margin-bottom: 12px; opacity: 0.3; }
+        .empty-state p { font-size: 0.9rem; }
+
+        /* ────────────────────── STATS ROW ──────────────────────────────────────── */
+        .stats-row {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;
+        }
+        @media (max-width: 768px) { .stats-row { grid-template-columns: 1fr; } }
+        .stat-card {
+            background: var(--gradient-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            text-align: center;
+            transition: var(--transition);
+            animation: fadeUp 0.5s ease-out both;
+        }
+        .stat-card:nth-child(2) { animation-delay: 0.1s; }
+        .stat-card:nth-child(3) { animation-delay: 0.2s; }
+        .stat-card:hover { border-color: var(--border-glow); }
+        .stat-value { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .stat-value.green  { color: var(--success); }
+        .stat-value.red    { color: var(--danger); }
+        .stat-value.purple { color: var(--accent-light); }
+        .stat-label { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* ─────────────────────── SPINNER ────────────────────────────────────────── */
+        .spinner {
+            width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white; border-radius: 50%;
+            animation: spin 0.7s linear infinite; display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─────────────────────── ANIMATIONS ─────────────────────────────────────── */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeUp 0.5s ease-out both; }
+    </style>
+</head>
+<body>
+
+<!-- ========================== LOGIN SCREEN ========================== -->
+<div id="loginScreen" class="login-wrapper">
+    <div class="login-card">
+        <h1>AttendTrack</h1>
+        <p class="subtitle">GPS-based Attendance System</p>
+        <div id="loginError" class="login-error hidden"></div>
+        <form id="loginForm" autocomplete="on">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" class="form-input" placeholder="Enter your username" autocomplete="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" class="form-input" placeholder="Enter your password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" id="loginBtn" class="btn-primary">
+                Sign In
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- ========================= DASHBOARD ============================== -->
+<div id="dashboardScreen" class="hidden">
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="url(#navGrad)" stroke-width="2"/>
+                <circle cx="12" cy="10" r="3" fill="#818cf8"/>
+                <path d="M12 13c-4 0-6 2-6 4v1h12v-1c0-2-2-4-6-4z" fill="#818cf8" opacity="0.6"/>
+                <defs><linearGradient id="navGrad" x1="2" y1="2" x2="22" y2="22"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+            </svg>
+            AttendTrack
+        </div>
+        <div class="navbar-user">
+            <div class="avatar" id="userAvatar">A</div>
+            <span id="userDisplay">admin</span>
+            <button class="btn-logout" id="logoutBtn">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Header -->
+        <div class="dashboard-header fade-in">
+            <h1>📍 Attendance Dashboard</h1>
+            <p>Mark your attendance using live GPS coordinates</p>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row" id="statsRow">
+            <div class="stat-card">
+                <div class="stat-value purple" id="statTotal">—</div>
+                <div class="stat-label">Total Check-ins</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value green" id="statPresent">—</div>
+                <div class="stat-label">Approved</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value red" id="statRejected">—</div>
+                <div class="stat-label">Rejected</div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="grid">
+            <!-- Left: GPS + Office Selection -->
+            <div class="card" style="animation-delay:0.15s">
+                <div class="card-title">
+                    <div class="icon blue">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+                    </div>
+                    Live GPS Location
+                </div>
+
+                <div class="gps-status" id="gpsStatus">
+                    <span class="gps-dot" id="gpsDot"></span>
+                    <span id="gpsText">Detecting location…</span>
+                </div>
+
+                <div class="coord-row">
+                    <div class="coord-box">
+                        <div class="label">Latitude</div>
+                        <div class="value" id="latDisplay">—</div>
+                    </div>
+                    <div class="coord-box">
+                        <div class="label">Longitude</div>
+                        <div class="value" id="lonDisplay">—</div>
+                    </div>
+                </div>
+
+                <div class="card-title" style="margin-top:8px">
+                    <div class="icon purple">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    </div>
+                    Select Office
+                </div>
+
+                <div class="select-wrapper">
+                    <select id="officeSelect" class="form-select">
+                        <option value="">Loading offices…</option>
+                    </select>
+                </div>
+                <div class="office-info" id="officeInfo">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span id="officeInfoText">Select an office to see its geofence radius</span>
+                </div>
+
+                <div style="display:flex;gap:12px">
+                    <button class="btn-mark" id="btnCheckIn" disabled style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                        Check In
+                    </button>
+                    <button class="btn-mark" id="btnCheckOut" disabled style="background:linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        Check Out
+                    </button>
+                </div>
+
+                <div id="resultToast"></div>
+            </div>
+
+            <!-- Right: Distance Gauge -->
+            <div class="card" style="animation-delay:0.25s">
+                <div class="card-title">
+                    <div class="icon green">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    Distance Check
+                </div>
+
+                <div class="gauge-container">
+                    <div class="gauge-ring">
+                        <svg viewBox="0 0 180 180">
+                            <defs>
+                                <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0%" stop-color="#34d399"/>
+                                    <stop offset="60%" stop-color="#fbbf24"/>
+                                    <stop offset="100%" stop-color="#f87171"/>
+                                </linearGradient>
+                            </defs>
+                            <circle class="gauge-track" cx="90" cy="90" r="80"/>
+                            <circle class="gauge-fill" id="gaugeFill" cx="90" cy="90" r="80"/>
+                        </svg>
+                        <div class="gauge-center">
+                            <div class="gauge-value" id="gaugeValue">—</div>
+                            <div class="gauge-unit">meters</div>
+                        </div>
+                    </div>
+                    <div class="gauge-label" id="gaugeLabel">Distance will appear after check-in</div>
+                </div>
+
+                <!-- Quick stats about last attempt -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+                    <div class="coord-box">
+                        <div class="label">Status</div>
+                        <div class="value" id="lastStatus" style="font-size:0.95rem">—</div>
+                    </div>
+                    <div class="coord-box">
+                        <div class="label">Allowed Radius</div>
+                        <div class="value" id="lastRadius" style="font-size:0.95rem">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full-width: Attendance History -->
+            <div class="card full-width" style="animation-delay:0.35s">
+                <div class="card-title">
+                    <div class="icon amber">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </div>
+                    Attendance History
+                </div>
+
+                <div class="table-wrapper">
+                    <table id="logsTable">
+                        <thead>
+                            <tr>
+                                <th>Date & Time</th>
+                                <th>Latitude</th>
+                                <th>Longitude</th>
+                                <th>Type</th>
+                                <th>Distance</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsBody">
+                            <tr><td colspan="6" class="empty-state"><p>No attendance records yet</p></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================== JAVASCRIPT ============================== -->
+<script>
+(function() {
+    'use strict';
+
+    // ── DOM References ──
+    const loginScreen    = document.getElementById('loginScreen');
+    const dashboardScreen= document.getElementById('dashboardScreen');
+    const loginForm      = document.getElementById('loginForm');
+    const loginError     = document.getElementById('loginError');
+    const loginBtn       = document.getElementById('loginBtn');
+    const logoutBtn      = document.getElementById('logoutBtn');
+    const userAvatar     = document.getElementById('userAvatar');
+    const userDisplay    = document.getElementById('userDisplay');
+    const gpsDot         = document.getElementById('gpsDot');
+    const gpsText        = document.getElementById('gpsText');
+    const latDisplay     = document.getElementById('latDisplay');
+    const lonDisplay     = document.getElementById('lonDisplay');
+    const officeSelect   = document.getElementById('officeSelect');
+    const officeInfoText = document.getElementById('officeInfoText');
+    const btnCheckIn     = document.getElementById('btnCheckIn');
+    const btnCheckOut    = document.getElementById('btnCheckOut');
+    const resultToast    = document.getElementById('resultToast');
+    const gaugeFill      = document.getElementById('gaugeFill');
+    const gaugeValue     = document.getElementById('gaugeValue');
+    const gaugeLabel     = document.getElementById('gaugeLabel');
+    const lastStatus     = document.getElementById('lastStatus');
+    const lastRadius     = document.getElementById('lastRadius');
+    const logsBody       = document.getElementById('logsBody');
+    const statTotal      = document.getElementById('statTotal');
+    const statPresent    = document.getElementById('statPresent');
+    const statRejected   = document.getElementById('statRejected');
+
+    // ── State ──
+    let currentUser = null;
+    let currentLat  = null;
+    let currentLon  = null;
+    let offices     = [];
+    let geoWatchId  = null;
+
+    // ── CSRF helper ──
+    function getCSRF() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? match[1] : '';
+    }
+
+    // ── API helpers ──
+    async function apiPost(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() },
+            credentials: 'same-origin',
+            body: JSON.stringify(body),
+        });
+        return { status: res.status, data: await res.json() };
+    }
+
+    async function apiGet(url) {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        return { status: res.status, data: await res.json() };
+    }
+
+    // ── LOGIN ──
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginError.classList.add('hidden');
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '<span class="spinner"></span>';
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        try {
+            const { status, data } = await apiPost('/api/attendance/login/', { username, password });
+            if (status === 200) {
+                currentUser = data.username;
+                showDashboard();
+            } else {
+                loginError.textContent = data.message || 'Invalid credentials';
+                loginError.classList.remove('hidden');
+            }
+        } catch (err) {
+            loginError.textContent = 'Network error. Is the server running?';
+            loginError.classList.remove('hidden');
+        }
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign In';
+    });
+
+    // ── LOGOUT ──
+    logoutBtn.addEventListener('click', async () => {
+        await apiPost('/api/attendance/logout/', {});
+        currentUser = null;
+        if (geoWatchId) navigator.geolocation.clearWatch(geoWatchId);
+        dashboardScreen.classList.add('hidden');
+        loginScreen.classList.remove('hidden');
+    });
+
+    // ── SHOW DASHBOARD ──
+    function showDashboard() {
+        loginScreen.classList.add('hidden');
+        dashboardScreen.classList.remove('hidden');
+        userAvatar.textContent = currentUser.charAt(0).toUpperCase();
+        userDisplay.textContent = currentUser;
+        startGPS();
+        loadOffices();
+        loadLogs();
+    }
+
+    // ── GPS ──
+    function startGPS() {
+        gpsDot.className = 'gps-dot loading';
+        gpsText.textContent = 'Acquiring GPS signal…';
+
+        if (!navigator.geolocation) {
+            gpsDot.className = 'gps-dot';
+            gpsText.textContent = 'Geolocation not supported';
+            return;
+        }
+
+        geoWatchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                currentLat = pos.coords.latitude;
+                currentLon = pos.coords.longitude;
+                latDisplay.textContent = currentLat.toFixed(6);
+                lonDisplay.textContent = currentLon.toFixed(6);
+                gpsDot.className = 'gps-dot active';
+                gpsText.textContent = `Signal locked (±${Math.round(pos.coords.accuracy)}m)`;
+                updateMarkButton();
+            },
+            (err) => {
+                gpsDot.className = 'gps-dot';
+                gpsText.textContent = `GPS error: ${err.message}`;
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        );
+    }
+
+    // ── OFFICES ──
+    async function loadOffices() {
+        try {
+            const { status, data } = await apiGet('/api/attendance/offices/');
+            if (status === 200) {
+                offices = data;
+                officeSelect.innerHTML = '<option value="">— Choose an office —</option>';
+                data.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o.id;
+                    opt.textContent = `${o.name} (radius: ${o.allowed_radius_meters}m)`;
+                    officeSelect.appendChild(opt);
+                });
+            }
+        } catch { officeSelect.innerHTML = '<option value="">Failed to load</option>'; }
+    }
+
+    officeSelect.addEventListener('change', () => {
+        const sel = offices.find(o => o.id == officeSelect.value);
+        if (sel) {
+            officeInfoText.textContent = `📍 ${sel.latitude.toFixed(4)}, ${sel.longitude.toFixed(4)} — allowed radius: ${sel.allowed_radius_meters}m`;
+            lastRadius.textContent = sel.allowed_radius_meters + 'm';
+        } else {
+            officeInfoText.textContent = 'Select an office to see its geofence radius';
+            lastRadius.textContent = '—';
+        }
+        updateMarkButton();
+    });
+
+    function updateMarkButton() {
+        const canMark = !!(currentLat && currentLon && officeSelect.value);
+        btnCheckIn.disabled = !canMark;
+        btnCheckOut.disabled = !canMark;
+    }
+
+    // ── MARK ATTENDANCE ──
+    async function handleMarkAttendance(actionType, btnElement) {
+        btnElement.disabled = true;
+        const originalHtml = btnElement.innerHTML;
+        btnElement.innerHTML = '<span class="spinner"></span> Checking…';
+        btnCheckIn.disabled = true;
+        btnCheckOut.disabled = true;
+        resultToast.innerHTML = '';
+
+        const officeId = parseInt(officeSelect.value);
+        try {
+            const { status, data } = await apiPost('/api/attendance/mark/', {
+                office_id: officeId,
+                latitude:  currentLat,
+                longitude: currentLon,
+                action_type: actionType,
+            });
+
+            const isSuccess = status === 200;
+            const dist = data.distance_meters;
+            const office = offices.find(o => o.id === officeId);
+            const radius = office ? office.allowed_radius_meters : 100;
+
+            updateGauge(dist, radius, isSuccess);
+
+            lastStatus.textContent = isSuccess ? '✅ PRESENT' : '❌ REJECTED';
+            lastStatus.style.color = isSuccess ? 'var(--success)' : 'var(--danger)';
+
+            resultToast.innerHTML = `
+                <div class="result-toast ${isSuccess ? 'success' : 'error'}">
+                    <div class="toast-title">${isSuccess ? '✅ ' + data.message : '❌ ' + data.message}</div>
+                    <div class="toast-body">${actionType === 'CHECK_IN' ? 'Check-In' : 'Check-Out'} Distance from office</div>
+                    <div class="distance-highlight">${dist} m</div>
+                </div>`;
+
+            loadLogs();
+
+        } catch (err) {
+            resultToast.innerHTML = `
+                <div class="result-toast error">
+                    <div class="toast-title">❌ Network Error</div>
+                    <div class="toast-body">${err.message}</div>
+                </div>`;
+        }
+
+        btnElement.innerHTML = originalHtml;
+        updateMarkButton();
+    }
+
+    btnCheckIn.addEventListener('click', () => handleMarkAttendance('CHECK_IN', btnCheckIn));
+    btnCheckOut.addEventListener('click', () => handleMarkAttendance('CHECK_OUT', btnCheckOut));
+
+
+    // ── GAUGE ──
+    function updateGauge(distance, radius, isSuccess) {
+        const circumference = 2 * Math.PI * 80; // r=80
+        const ratio = Math.min(distance / (radius * 2), 1); // cap at 100%
+        const offset = circumference * (1 - ratio);
+        gaugeFill.style.strokeDashoffset = offset;
+        gaugeValue.textContent = distance;
+        gaugeValue.style.color = isSuccess ? 'var(--success)' : 'var(--danger)';
+        gaugeLabel.textContent = isSuccess
+            ? `Within ${radius}m geofence ✓`
+            : `Exceeded ${radius}m geofence ✗`;
+    }
+
+    // ── LOGS ──
+    async function loadLogs() {
+        try {
+            const { status, data } = await apiGet('/api/attendance/logs/');
+            if (status === 200 && data.length > 0) {
+                // Stats
+                const present  = data.filter(l => l.status === 'PRESENT').length;
+                const rejected = data.filter(l => l.status === 'REJECTED').length;
+                statTotal.textContent    = data.length;
+                statPresent.textContent  = present;
+                statRejected.textContent = rejected;
+
+                // Table
+                logsBody.innerHTML = data.map(log => {
+                    const dt = new Date(log.timestamp);
+                    const dateStr = dt.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+                    const timeStr = dt.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+                    const badgeClass = log.status === 'PRESENT' ? 'present' : 'rejected';
+                    const typeStr = log.action_type === 'CHECK_IN' ? 'Check In' : 'Check Out';
+                    return `<tr>
+                        <td>${dateStr}, ${timeStr}</td>
+                        <td>${log.latitude.toFixed(6)}</td>
+                        <td>${log.longitude.toFixed(6)}</td>
+                        <td><strong>${typeStr}</strong></td>
+                        <td>${log.distance_meters} m</td>
+                        <td><span class="badge ${badgeClass}"><span class="badge-dot"></span>${log.status}</span></td>
+                    </tr>`;
+                }).join('');
+            } else {
+                statTotal.textContent = '0';
+                statPresent.textContent = '0';
+                statRejected.textContent = '0';
+                logsBody.innerHTML = '<tr><td colspan="6" class="empty-state"><p>No attendance records yet</p></td></tr>';
+            }
+        } catch { /* silently fail */ }
+    }
+
+})();
+</script>
+
+</body>
+</html>

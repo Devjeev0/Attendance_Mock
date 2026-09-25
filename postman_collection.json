@@ -1,0 +1,353 @@
+{
+  "info": {
+    "name": "GPS Attendance Validation API",
+    "description": "Collection for testing the GPS-based Attendance Validation API built with Django REST Framework and PostGIS.\n\n## Setup\n1. Start the Django dev server: `python manage.py runserver`\n2. Ensure PostGIS database is running with the `attendance_db` database.\n3. Create a superuser: `python manage.py createsuperuser`\n4. Seed at least one Office via Django admin or shell.\n\n## Authentication\nThis collection uses Session authentication. Run the **Login** request first to establish a session cookie, which is automatically reused by subsequent requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "admin",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints for session management.",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('SUCCESS');",
+                  "    pm.expect(json.username).to.be.a('string');",
+                  "});",
+                  "",
+                  "// Store CSRF token from cookie for subsequent requests",
+                  "var csrfToken = pm.cookies.get('csrftoken');",
+                  "if (csrfToken) {",
+                  "    pm.collectionVariables.set('csrf_token', csrfToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}",
+                "description": "CSRF token (auto-populated after first login)"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/attendance/login/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "login", ""]
+            },
+            "description": "Authenticate and establish a session. The session cookie is automatically stored by Postman and reused in subsequent requests.\n\n**Note:** On first login the CSRF token may not be set yet. If you get a 403 Forbidden, first do a GET to the base URL to obtain the CSRF cookie, then retry."
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Logout successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('SUCCESS');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/attendance/logout/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "logout", ""]
+            },
+            "description": "End the current session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Offices",
+      "description": "Office management endpoints.",
+      "item": [
+        {
+          "name": "List Offices",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Offices returned', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('array');",
+                  "});",
+                  "",
+                  "// Auto-set office_id from first office for convenience",
+                  "var json = pm.response.json();",
+                  "if (json.length > 0) {",
+                  "    pm.collectionVariables.set('office_id', json[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/attendance/offices/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "offices", ""]
+            },
+            "description": "Retrieve all registered offices with their GPS coordinates and geofence radius."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Attendance",
+      "description": "Core attendance marking and log retrieval.",
+      "item": [
+        {
+          "name": "Mark Attendance — Within Radius",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Attendance marked successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('SUCCESS');",
+                  "    pm.expect(json.distance_meters).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"office_id\": 1,\n  \"latitude\": 13.0827,\n  \"longitude\": 80.2707\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/attendance/mark/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "mark", ""]
+            },
+            "description": "Submit GPS coordinates that are WITHIN the office geofence radius.\n\nExpected: 200 OK with status SUCCESS."
+          }
+        },
+        {
+          "name": "Mark Attendance — Out of Radius",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Attendance rejected — out of radius', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('FAILED');",
+                  "    pm.expect(json.message).to.include('radius');",
+                  "    pm.expect(json.distance_meters).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"office_id\": 1,\n  \"latitude\": 12.9716,\n  \"longitude\": 77.5946\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/attendance/mark/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "mark", ""]
+            },
+            "description": "Submit GPS coordinates that are FAR OUTSIDE the office geofence (Bangalore coords vs Chennai office).\n\nExpected: 400 Bad Request with status FAILED."
+          }
+        },
+        {
+          "name": "Mark Attendance — Invalid Office",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Office not found', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('FAILED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"office_id\": 9999,\n  \"latitude\": 13.0827,\n  \"longitude\": 80.2707\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/attendance/mark/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "mark", ""]
+            },
+            "description": "Attempt to mark attendance for a non-existent office.\n\nExpected: 404 Not Found."
+          }
+        },
+        {
+          "name": "Mark Attendance — Invalid Coordinates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Validation error for invalid coordinates', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"office_id\": 1,\n  \"latitude\": 999.0,\n  \"longitude\": -200.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/attendance/mark/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "mark", ""]
+            },
+            "description": "Submit invalid GPS coordinates that exceed WGS 84 ranges.\n\nExpected: 400 Bad Request with validation errors from serializer."
+          }
+        },
+        {
+          "name": "Get Attendance Logs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Logs returned', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/attendance/logs/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "attendance", "logs", ""]
+            },
+            "description": "Retrieve the authenticated user's attendance log history (newest first, max 50)."
+          }
+        }
+      ]
+    }
+  ]
+}
