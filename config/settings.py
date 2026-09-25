@@ -31,7 +31,17 @@ SECRET_KEY = 'django-insecure-p4lr63f%@wn8+&p#7uc_^4iqr8845$1#ikgfzc4-q6-&x=#-3!
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'lee-tabernacular-inexpugnably.ngrok-free.dev',
+    '.ngrok-free.dev',
+    'localhost',
+    '127.0.0.1',
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://lee-tabernacular-inexpugnably.ngrok-free.dev',
+    'https://*.ngrok-free.dev',
+]
 
 
 # Application definition
